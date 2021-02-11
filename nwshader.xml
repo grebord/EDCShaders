@@ -1,0 +1,27 @@
+﻿<NWShader>
+  <Settings>
+    <TintWorld>false</TintWorld>
+    <DebugLevel>0</DebugLevel>
+    <UseFBO>false</UseFBO>
+    <OverlayCorner>0</OverlayCorner>
+    <PerPixel>false</PerPixel>
+    <PerMaterial>false</PerMaterial>
+    <Fullscreen>true</Fullscreen>
+    <LogFPS>false</LogFPS>
+    <UseFog>true</UseFog>
+    <FogMult>1.00</FogMult>
+    <UseDepth>true</UseDepth>
+    <UseHDR>false</UseHDR>
+    <UseFocus>false</UseFocus>
+    <ShiftFocus>0</ShiftFocus>
+    <UseScripts>false</UseScripts>
+    <CatchScreens>false</CatchScreens>
+    <UseQueue>false</UseQueue>
+    <Language>en</Language>
+  </Settings>
+  <Shaders>
+    <Shader0>sceneAdjust.cgfx</Shader0>
+	<Shader1>sceneSSAO.cgfx</Shader1>
+	<Shader2>sceneSharpen.cgfx</Shader2>
+  </Shaders>
+</NWShader>

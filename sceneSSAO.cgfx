@@ -1,0 +1,163 @@
+//			sceneSSAO 1.2.1
+//		for	NWShader Bahamut 0214, by yeneko -
+//		Modification of: SSAO for NWShader v0.1f, by peachykeen
+// Licensed under GNU GPL v3 see LICENSE_sceneSSAO file in docs folder
+
+// Set the variable below to 0.99865 for stronger SSAO at long distances.
+// This value should never be higher than 0.99950. Default: 0.99815
+float dFadeMin = 0.99815;
+
+sampler2D depthFrame = sampler_state {
+	generateMipMap = false;
+	minFilter = Nearest;
+	magFilter = Nearest;
+};
+
+sampler2D lastPass = sampler_state {
+	generateMipMap = true;
+	minFilter = LinearMipMapLinear;
+	magFilter = Linear;
+    WrapS = Clamp;
+    WrapT = Clamp;
+};
+
+sampler2D lastShader = sampler_state {
+	generateMipMap = true;
+	minFilter = LinearMipMapLinear;
+	magFilter = Linear;
+    WrapS = Clamp;
+    WrapT = Clamp;
+};
+
+float2 viewport = { 1/1024, 1/768 };
+
+float shader_flags = 0x0001;
+
+float4 normalizeDepth(in float2 uv : TEXCOORD0) : COLOR
+{
+	float n = 1.0f;
+	float distance = tex2D(depthFrame, uv * 2.0).r;
+	float4 output = 0;
+	output.r = (2.0 * n) / (1500 + n - distance * (1500 - n));
+	output.g = (2.0 * n) / ( 500 + n - distance * ( 500 - n));
+	output.b = (2.0 * n) / ( 100 + n - distance * ( 100 - n));
+	output.a = 1.0f;
+	return output;
+}
+
+float4 blurH(in float2 uv : TEXCOORD0) : COLOR
+{
+	float4 color = tex2D(lastPass, uv);
+	float2 pos = uv;
+	float2 vp = viewport;
+
+	pos.x -= vp.x;
+	color += tex2D(lastPass, pos) * 0.5;
+	pos.x -= vp.x;
+	color += tex2D(lastPass, pos) * 0.3125;
+	pos.x -= vp.x;
+	color += tex2D(lastPass, pos) * 0.125;
+	pos.x = uv.x + vp.x;
+	color += tex2D(lastPass, pos) * 0.5;
+	pos.x += vp.x;
+	color += tex2D(lastPass, pos) * 0.3125;
+	pos.x += vp.x;
+	color += tex2D(lastPass, pos) * 0.125;
+	
+	color.rgb /= 2.9375;
+	
+	return color;
+}
+
+
+float4 blurV(in float2 uv : TEXCOORD0) : COLOR
+{
+	float4 color = tex2D(lastPass, uv);
+	float2 pos = uv;
+	float2 vp = viewport;
+
+	pos.y -= vp.y;
+	color += tex2D(lastPass, pos) * 0.5;
+	pos.y -= vp.y;
+	color += tex2D(lastPass, pos) * 0.3125;
+	pos.y -= vp.y;
+	color += tex2D(lastPass, pos) * 0.125;
+	pos.y = uv.y + vp.y;
+	color += tex2D(lastPass, pos) * 0.5;
+	pos.y += vp.y;
+	color += tex2D(lastPass, pos) * 0.3125;
+	pos.y += vp.y;
+	color += tex2D(lastPass, pos) * 0.125;
+
+	color.rgb /= 2.9375;
+	
+	return color;
+}
+
+float getOccC(float4 depth, float4 blurMask)
+{
+	float n = 1.0f;
+	depth.r = (2.0 * n) / (1500 + n - depth.r * (1500 - n));
+	depth.g = (2.0 * n) / ( 150 + n - depth.g * ( 150 - n));
+	depth.b = (2.0 * n) / ( 500 + n - depth.b * ( 500 - n));
+
+	float4 oOffset = 1;
+	oOffset = blurMask - depth;
+
+	oOffset = clamp(oOffset, -0.9, 0);
+	oOffset += 0.90;
+	oOffset *= oOffset;
+	oOffset += (1 - 0.81);
+	oOffset = saturate(oOffset);
+
+	return (oOffset.r * (oOffset.g + 0.25));
+}
+
+float dFadeMax = 0.99965;
+//float dFadeMin = 0.99815;
+float brightTop   = 1.18;
+float brightBase  = 0.70;
+
+float4 SSAO(in float2 uv : TEXCOORD0) : COLOR
+{
+	float4 color = tex2D(lastShader, uv);
+	float4 depth = tex2D(depthFrame, uv);
+	
+	if (depth.r < dFadeMax)
+	{
+		float4 blurMask = tex2D(lastPass, uv * 0.5);
+		
+		float dFadeC = saturate((depth.r - dFadeMin) / (dFadeMax - dFadeMin));
+		float occl = getOccC(depth, blurMask);
+		occl *= (brightBase + (brightTop - brightBase) * (1.0 - dFadeC));
+		occl = lerp(occl, 1.0, dFadeC);
+		
+		color.rgb *= occl;
+	}
+	
+    return float4(color.rgb, 1.0f);
+}
+
+technique ssao
+{
+	pass 
+	{
+		FragmentProgram =
+			compile latest normalizeDepth();
+	}
+	pass
+	{
+		FragmentProgram =
+			compile latest blurH();
+	}
+	pass 
+	{
+		FragmentProgram =
+			compile latest blurV();
+	}
+	pass 
+	{
+		FragmentProgram =
+			compile latest SSAO();
+	}
+}

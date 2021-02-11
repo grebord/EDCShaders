@@ -1,0 +1,89 @@
+// 			sceneAdjust 1.2.1
+// 		for NWShader Bahamut 0214, by yeneko
+// Licensed under MIT License see LICENSE file in docs folder for details
+
+// ******** Modify the numerical values below to tweak effects ***************
+
+// Brightening Magnitude
+// The higher the number, the stronger the pseudo-Bloom effect is.
+// Interval: [0:1]  Default: 0.40  Neutral/Disabled: 0
+float brightMag = 0.40; 
+
+// Brightness Cutoff
+// The higher the number, the more objects are affected by Bloom.
+// Interval: [0:1]  Default: 0.50  Neutral/Disabled: 0
+float brightCOf = 0.50;
+
+// Lift
+// Adjust Lowtones (i.e darker portions of the image).
+// Interval: [0:2]  Default: 0.97  Neutral/Disabled: 1
+float colorLift = 0.97;
+
+// Gain
+// Adjust Hightones (i.e brighter portions of the image).
+// Interval: [0:2]  Default: 1.02  Neutral/Disabled: 1
+float colorGain = 1.02;
+
+// Relative Saturation
+// The farther the value is from 1.0, the more or less salient colors are.
+// Interval: [0:2]  Default: 0.93  Neutral/Disabled: 1
+float colorSatr = 0.93;
+
+// ***************************************************************************
+
+sampler2D lastPass = sampler_state {
+	generateMipMap = true;
+	minFilter = LinearMipMapLinear;
+	magFilter = Linear;
+    WrapS = Clamp;
+    WrapT = Clamp;
+};
+
+sampler2D depthFrame = sampler_state {
+	generateMipMap = false;
+	minFilter = Nearest;
+	magFilter = Nearest;
+};
+
+float shader_flags = 0x0001; // Shader will default to ON when selected
+
+float dFadeMax = 0.99965; // Max safe depth that excludes skybox
+float dFadeMin = 0.99865; // Depth at which to start effect fade
+float3 lumC = { 0.2126, 0.7152, 0.0722 }; // BT.709 & sRBG luma coefficient
+float3 brightTint = { 1.00, 0.75, 0.50 }; // About 3350K color temperature
+
+float4 sceneAdjust(in float2 uv : TEXCOORD0) : COLOR
+{
+	float3 color = tex2D(lastPass, uv).rgb;
+	
+	float dFadeC = tex2D(depthFrame, uv).r;
+	dFadeC = saturate((dFadeC - dFadeMin) / (dFadeMax - dFadeMin));
+	
+	// Lift-Gain
+	color  = color * (1.5 - 0.5 * colorLift) +  0.5 * colorLift - 0.5;
+	color *= colorGain;
+	
+	// Pseudo-Bloom - A more elaborate, picky form of Gain
+	float bCOff = min(1.0 - brightCOf, 0.95);
+	float bModC = max(color.r, max(color.g, color.b));
+	bModC = saturate((bModC - bCOff) / (1.0 - bCOff));
+	color *= (1.0 + brightTint * brightMag * bModC * (1.0 - dFadeC));
+	
+	// Relative Saturation
+	float satC = colorSatr - 1.0;
+	satC = sign(satC) * pow(sign(satC) * satC, 1.0 + dFadeC);
+	float satr = max(color.r, max(color.g, color.b));
+	satr -= min(color.r, min(color.g, color.b));
+	satC = 1.0 + satC * (1.0 - sign(satC) * satr);
+	color = lerp(dot(color, lumC).rrr, color, satC.rrr);
+	
+	return float4(color, 1.0f);
+}
+
+technique sceneAdjust
+{
+	pass 
+	{
+		FragmentProgram = compile latest sceneAdjust();
+	}
+}

@@ -1,0 +1,59 @@
+//			sceneSharpen 1.2.1
+// 		for NWShader Bahamut 0214, by yeneko -
+//		Port of: "Pattern 1" of LumaSharpen 1.4.1 for SweetFX 1.5,
+//				 by Christian Cann Schuldt Jensen ~ CeeJay.dk
+// Licensed under MIT License see LICENSE file in docs folder for details
+
+// ******** Modify the numerical values below to tweak effects ****************
+
+// Strength of the sharpening
+// Interval: [0.100 : 3.000]  Default: 0.600
+float sharpMag = 0.600;
+
+// Sharpening limit for pixel
+// Interval: [0.005 : 1.000]  Default: 0.020
+float sharpLim = 0.020;
+
+// ****************************************************************************
+
+
+sampler2D lastPass = sampler_state {
+	generateMipMap = true;
+	minFilter = LinearMipMapLinear;
+	magFilter = Linear;
+    WrapS = Clamp;
+    WrapT = Clamp;
+};
+
+float shader_flags = 0x0001; // Shader will default to ON when selected
+
+float2 viewport = { 1/1024, 1/768 }; // This is later assigned viewport info
+
+float3 lumC = { 0.2126, 0.7152, 0.0722 }; // BT.709 & sRBG luma coefficient
+
+float4 sceneSharpen(in float2 uv : TEXCOORD0) : COLOR
+{
+	float3 color = tex2D(lastPass, uv).rgb;
+
+	float3 mask = tex2D(lastPass, uv + viewport / 3.0).rgb;
+	mask += tex2D(lastPass, uv - viewport / 3.0).rgb;
+	mask = color - mask * 0.5;
+
+	float3 sharpC = lumC * sharpMag;
+	sharpC *= (0.5 / max(sharpLim, 0.005));
+
+    float sharpen = saturate(dot(mask, sharpC) + 0.5);
+    sharpen = (sharpLim * 2.0) * sharpen - sharpLim;
+	
+	color = saturate(color + sharpen);
+	
+	return float4(color, 1.0f);
+}
+
+technique sceneSharpen
+{
+	pass 
+	{
+		FragmentProgram = compile latest sceneSharpen();
+	}
+}
